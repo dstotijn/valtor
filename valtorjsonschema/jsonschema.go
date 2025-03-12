@@ -17,6 +17,7 @@ package valtorjsonschema
 import (
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"regexp"
 	"slices"
@@ -125,9 +126,20 @@ func parseJSONSchema[T any](schema jsonschema.Schema, required bool) (*valtor.Sc
 					return fmt.Errorf("uint value %d exceeds maximum int64", typedValue)
 				}
 				return numSchema.Validate(int64(typedValue))
+			case float64:
+				// Check if the float has a fractional part.
+				if typedValue != math.Trunc(typedValue) {
+					return fmt.Errorf("expected integer value, got float with fractional part: %v", typedValue)
+				}
+				// Check for overflow.
+				if typedValue > math.MaxInt64 || typedValue < math.MinInt64 {
+					return fmt.Errorf("float value %v exceeds int64 range", typedValue)
+				}
+				return numSchema.Validate(int64(typedValue))
 			case nil:
 				return numSchema.Validate(0)
 			default:
+				log.Printf("expected integer value, got %T", typedValue)
 				return fmt.Errorf("expected integer value, got %T", typedValue)
 			}
 		}), nil
