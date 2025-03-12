@@ -38,7 +38,11 @@ func Object[T any]() *ObjectSchema[T] {
 // Field adds a field validator to the schema and returns the schema for chaining.
 func (s *ObjectSchema[T]) Field(fieldName string, validateFn func(T) error) *ObjectSchema[T] {
 	s.fieldValidators[fieldName] = func(value any) error {
-		if err := validateFn(value.(T)); err != nil {
+		// Test whether the value is of type T, else use its zero value (which
+		// could be nil, and should be handled by the validator).
+		typedValue, _ := value.(T)
+
+		if err := validateFn(typedValue); err != nil {
 			return fmt.Errorf("validation failed for field %q: %w", fieldName, err)
 		}
 		return nil
@@ -78,12 +82,9 @@ func (s *ObjectSchema[T]) Validate(value T) error {
 // ValidateMap validates a map (keyed by field name) of values against the schema.
 func (s *ObjectSchema[T]) ValidateMap(values map[string]any) error {
 	for fieldName, validateFn := range s.fieldValidators {
-		value, ok := values[fieldName]
-		if !ok {
-			return fmt.Errorf("field %q not found", fieldName)
-		}
+		value := values[fieldName]
 		if err := validateFn(value); err != nil {
-			return fmt.Errorf("validation failed for field %q: %w", fieldName, err)
+			return err
 		}
 	}
 	return nil

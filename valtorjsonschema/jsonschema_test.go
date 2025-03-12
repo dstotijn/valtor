@@ -24,10 +24,10 @@ import (
 
 func TestParseJSONSchema(t *testing.T) {
 	validData := map[string]any{
-		"name":   "John Doe",
-		"age":    int64(30),
-		"height": 1.75,
-		"email":  "john@example.com",
+		"name": "John Doe",
+		"age":  int64(30),
+		// missing non required field `height`
+		"email": "john@example.com",
 	}
 	invalidData := map[string]any{
 		"name":   "John123", // contains numbers

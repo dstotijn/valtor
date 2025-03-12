@@ -65,6 +65,8 @@ func parseJSONSchema[T any](schema jsonschema.Schema, required bool) (*valtor.Sc
 			switch typedValue := any(value).(type) {
 			case string:
 				return strSchema.Validate(typedValue)
+			case nil:
+				return strSchema.Validate("")
 			default:
 				return fmt.Errorf("expected string value, got %T", value)
 			}
@@ -123,6 +125,8 @@ func parseJSONSchema[T any](schema jsonschema.Schema, required bool) (*valtor.Sc
 					return fmt.Errorf("uint value %d exceeds maximum int64", typedValue)
 				}
 				return numSchema.Validate(int64(typedValue))
+			case nil:
+				return numSchema.Validate(0)
 			default:
 				return fmt.Errorf("expected integer value, got %T", typedValue)
 			}
@@ -174,6 +178,8 @@ func parseJSONSchema[T any](schema jsonschema.Schema, required bool) (*valtor.Sc
 				return numSchema.Validate(float64(typedValue))
 			case uint:
 				return numSchema.Validate(float64(typedValue))
+			case nil:
+				return numSchema.Validate(0)
 			default:
 				return fmt.Errorf("expected numeric value, got %T", typedValue)
 			}
@@ -196,9 +202,7 @@ func parseJSONSchema[T any](schema jsonschema.Schema, required bool) (*valtor.Sc
 				return nil, fmt.Errorf("invalid schema for property %q: %w", pair.Key, err)
 			}
 
-			objSchema.Field(pair.Key, func(value any) error {
-				return fieldSchema.Validate(value)
-			})
+			objSchema.Field(pair.Key, fieldSchema.Validate)
 		}
 
 		return valtor.New[T]().Custom(func(value T) error {
