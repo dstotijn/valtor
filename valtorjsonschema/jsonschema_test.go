@@ -27,18 +27,37 @@ func TestParseJSONSchema(t *testing.T) {
 		"name": "John Doe",
 		"age":  int64(30),
 		// missing non required field `height`
-		"email": "john@example.com",
+		"email":     "john@example.com",
+		"tags":      []any{"personal", "employee"}, // Valid tags array
+		"is_active": true,                          // Valid boolean
+		"meta":      nil,                           // Valid null
 	}
 	invalidData := map[string]any{
-		"name":   "John123", // contains numbers
-		"age":    int64(0),  // not greater than 0
-		"height": 4.0,       // too tall
-		"email":  "invalid-email",
+		"name":      "John123", // contains numbers
+		"age":       int64(0),  // not greater than 0
+		"height":    4.0,       // too tall
+		"email":     "invalid-email",
+		"tags":      []any{"a", "a"}, // Duplicate items, violates uniqueItems
+		"is_active": "yes",           // String instead of boolean
+		"meta":      "metadata",      // String instead of null
 	}
 	missingRequiredData := map[string]any{
 		"height": 1.75,
 		"email":  "john@example.com",
 		// missing required fields: name and age
+		"tags": []any{}, // Empty array, violates minItems = 1
+	}
+	invalidArrayData := map[string]any{
+		"name":  "John Doe",
+		"age":   int64(30),
+		"email": "john@example.com",
+		"tags":  []any{"personal", "employee", "manager", "leader", "admin", "extra"}, // Too many items, violates maxItems = 5
+	}
+	invalidArrayItemData := map[string]any{
+		"name":  "John Doe",
+		"age":   int64(30),
+		"email": "john@example.com",
+		"tags":  []any{"personal", ""}, // Empty string item, violates minLength = 1
 	}
 
 	schemaBytes, err := os.ReadFile("testdata/basic.json")
@@ -74,6 +93,39 @@ func TestParseJSONSchema(t *testing.T) {
 	err = valtorSchema.Validate(missingRequiredData)
 	if err == nil {
 		t.Error("expected missing required fields to fail validation, got no error")
+	}
+
+	// Test invalid array data against parsed schema.
+	err = valtorSchema.Validate(invalidArrayData)
+	if err == nil {
+		t.Error("expected invalid array data to fail validation, got no error")
+	}
+
+	// Test invalid array item data against parsed schema.
+	err = valtorSchema.Validate(invalidArrayItemData)
+	if err == nil {
+		t.Error("expected invalid array item data to fail validation, got no error")
+	}
+
+	// Test specific invalid types
+	invalidBooleanData := map[string]any{
+		"name":      "John Doe",
+		"age":       int64(30),
+		"is_active": "true", // String instead of boolean
+	}
+	err = valtorSchema.Validate(invalidBooleanData)
+	if err == nil {
+		t.Error("expected invalid boolean data to fail validation, got no error")
+	}
+
+	invalidNullData := map[string]any{
+		"name": "John Doe",
+		"age":  int64(30),
+		"meta": false, // Boolean instead of null
+	}
+	err = valtorSchema.Validate(invalidNullData)
+	if err == nil {
+		t.Error("expected invalid null data to fail validation, got no error")
 	}
 }
 

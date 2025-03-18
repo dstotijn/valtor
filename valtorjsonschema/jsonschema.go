@@ -35,12 +35,90 @@ func ParseJSONSchema[T any](schema jsonschema.Schema) (*valtor.Schema[T], error)
 func parseJSONSchema[T any](schema jsonschema.Schema, required bool) (*valtor.Schema[T], error) {
 	switch schema.Type {
 	case "null":
-		fallthrough
+		nullSchema := valtor.Null()
+
+		return valtor.New[T]().Custom(func(value T) error {
+			return nullSchema.Validate(value)
+		}), nil
 	case "boolean":
-		fallthrough
+		boolSchema := valtor.Bool()
+
+		return valtor.New[T]().Custom(func(value T) error {
+			switch v := any(value).(type) {
+			case bool:
+				return boolSchema.Validate(v)
+			case nil:
+				if required {
+					return valtor.ErrValueRequired
+				}
+				return nil
+			default:
+				return fmt.Errorf("expected boolean value, got %T", v)
+			}
+		}), nil
 	case "array":
-		// TODO
-		panic("not implemented")
+		if schema.Items == nil {
+			arrSchema := valtor.Array[any]()
+
+			if schema.MinItems != nil {
+				arrSchema.Min(int(*schema.MinItems))
+			}
+
+			if schema.MaxItems != nil {
+				arrSchema.Max(int(*schema.MaxItems))
+			}
+
+			if schema.UniqueItems {
+				arrSchema.UniqueItems()
+			}
+
+			return valtor.New[T]().Custom(func(value T) error {
+				switch v := any(value).(type) {
+				case []any:
+					return arrSchema.Validate(v)
+				case nil:
+					if required && schema.MinItems != nil && *schema.MinItems > 0 {
+						return valtor.ErrValueRequired
+					}
+					return nil
+				default:
+					return fmt.Errorf("expected array value, got %T", v)
+				}
+			}), nil
+		}
+
+		itemSchema, err := parseJSONSchema[any](*schema.Items, false)
+		if err != nil {
+			return nil, fmt.Errorf("invalid item schema: %w", err)
+		}
+
+		arrSchema := valtor.Array[any]().Items(itemSchema.Validate)
+
+		if schema.MinItems != nil {
+			arrSchema.Min(int(*schema.MinItems))
+		}
+
+		if schema.MaxItems != nil {
+			arrSchema.Max(int(*schema.MaxItems))
+		}
+
+		if schema.UniqueItems {
+			arrSchema.UniqueItems()
+		}
+
+		return valtor.New[T]().Custom(func(value T) error {
+			switch v := any(value).(type) {
+			case []any:
+				return arrSchema.Validate(v)
+			case nil:
+				if required && schema.MinItems != nil && *schema.MinItems > 0 {
+					return valtor.ErrValueRequired
+				}
+				return nil
+			default:
+				return fmt.Errorf("expected array value, got %T", v)
+			}
+		}), nil
 	case "string":
 		strSchema := valtor.String()
 
@@ -80,7 +158,6 @@ func parseJSONSchema[T any](schema jsonschema.Schema, required bool) (*valtor.Sc
 			if err != nil {
 				return nil, fmt.Errorf("invalid `minimum` value %q", min)
 			}
-			// For integers, we need to handle decimal minimums by rounding up.
 			minInt := int64(math.Ceil(minFloat))
 			numSchema.Min(minInt)
 		}
@@ -89,7 +166,6 @@ func parseJSONSchema[T any](schema jsonschema.Schema, required bool) (*valtor.Sc
 			if err != nil {
 				return nil, fmt.Errorf("invalid `maximum` value %q", max)
 			}
-			// For integers, we need to handle decimal maximums by rounding down.
 			maxInt := int64(math.Floor(maxFloat))
 			numSchema.Max(maxInt)
 		}
@@ -127,11 +203,9 @@ func parseJSONSchema[T any](schema jsonschema.Schema, required bool) (*valtor.Sc
 				}
 				return numSchema.Validate(int64(typedValue))
 			case float64:
-				// Check if the float has a fractional part.
 				if typedValue != math.Trunc(typedValue) {
 					return fmt.Errorf("expected integer value, got float with fractional part: %v", typedValue)
 				}
-				// Check for overflow.
 				if typedValue > math.MaxInt64 || typedValue < math.MinInt64 {
 					return fmt.Errorf("float value %v exceeds int64 range", typedValue)
 				}
